@@ -1,83 +1,147 @@
 // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
 /*
- * MikroTik KNOT RB924i-2nD-BT5&BG77 r2: suporte MINIMO para boot em RAM
- * (initramfs pela Ether1). Sem flash, LEDs, botao, GPIO, USB, Wi-Fi e SPI.
+ * MikroTik KNOT RB924i-2nD-BT5&BG77, revisao r2: suporte MINIMO para boot em
+ * RAM (initramfs pela Ether1). Descrito aqui: CPU, RAM, UART, Ethernet, botao
+ * de reset (GPIO16) e o azul do LED power (GPIO4). Ainda NAO descritos: flash
+ * (SPI-NOR e SPI-NAND), USB (hub, modem BG77, PL2303), Wi-Fi, Bluetooth, os
+ * demais LEDs e o PoE-out da Ether2.
  *
- * Base: qca953x.dtsi direto, e nao qca9533_mikrotik_routerboard-16m.dtsi
- * nem -95x.dtsi, porque estes declaram SPI-NOR de 16 MiB com particao
- * "firmware" gravavel, botao no gpio 16, LEDs e gpio-export de PoE (gpio 14),
- * nada disso comprovado no KNOT.
+ * Base: qca953x.dtsi direto, e nao qca9533_mikrotik_routerboard-16m.dtsi nem
+ * -95x.dtsi, porque estes declaram SPI-NOR de 16 MiB com particao "firmware"
+ * gravavel, LEDs num 74hc595 e gpio-export de PoE (gpio 14), nada disso
+ * comprovado no KNOT. O botao e o LED power foram medidos nesta placa e estao
+ * descritos abaixo.
+ *
+ * Evidencia citada como "medido": leituras numa unidade r2 com OpenWrt em RAM
+ * (registradores de GPIO via devmem, sysfs, swconfig, ethtool), 2026-11-23.
  */
 
 #include "qca953x.dtsi"
 
+/* Constantes usadas abaixo: GPIO_ACTIVE_LOW (gpio.h) e KEY_RESTART (input.h). */
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
 / {
 	/*
-	 * evid: firmware-type "qca9531" (ficha 02, C). Sufixo -r2: as unidades
-	 * sem revisao sao "qca9531L" com 16 MiB (ficha, comparacao entre
-	 * unidades, H) e devem ganhar outro compatible quando houver flash no DTS.
+	 * "qca9531": firmware-type informado pelo RouterOS desta unidade.
+	 * Sufixo -r2: as unidades sem revisao vistas ate agora sao "qca9531L" com
+	 * 16 MiB de flash (sem a SPI-NAND) e devem ganhar outro compatible quando
+	 * a flash entrar no DTS.
 	 */
 	compatible = "mikrotik,routerboard-924i-2nd-bt5-bg77-r2", "qca,qca9531";
-	/* evid: board KNOT, model RB924i-2nD-BT5&BG77, revision r2 (ficha 02, C) */
+	/* board KNOT, model RB924i-2nD-BT5&BG77, revision r2 (RouterOS desta unidade) */
 	model = "MikroTik RouterBOARD 924i-2nD-BT5&BG77 (KNOT) r2";
 
 	aliases {
 		/* ref: qca9533_mikrotik_routerboard-16m.dtsi:9-11 */
 		serial0 = &uart;
+
+		/*
+		 * LEDs de estado do OpenWrt (etc/diag.sh): o LED power pisca no boot,
+		 * pisca rapido no modo failsafe, fica aceso com o sistema pronto e
+		 * pisca durante atualizacao. Sem esses aliases o OpenWrt nao teria
+		 * nenhum LED para sinalizar o proprio estado. (O sysupgrade desta
+		 * placa continua bloqueado; o alias de upgrade e so visual.)
+		 */
+		led-boot = &led_power;
+		led-failsafe = &led_power;
+		led-running = &led_power;
+		led-upgrade = &led_power;
+	};
+
+	/*
+	 * Botao de reset.
+	 * Medido: GPIO16 e entrada; le 1 com o botao solto e 0 enquanto apertado
+	 * (3 apertos, so o bit 16 de GPIO_IN muda). Mesmo pino e polaridade da
+	 * familia 95x: qca9533_mikrotik_routerboard-16m.dtsi:13-20.
+	 *
+	 * Efeito no OpenWrt (KEY_RESTART -> /etc/rc.button/reset):
+	 *  - sistema ja no ar: toque curto (menos de 1 s) reinicia; segurar 5 s
+	 *    ou mais volta as configuracoes de fabrica, mas so com /overlay (OpenWrt
+	 *    instalado). Em RAM so o toque curto tem efeito.
+	 *  - durante o comeco do boot (preinit), o botao pede o modo failsafe.
+	 * Cuidado: nunca segurar o botao enquanto o KNOT reinicia ou liga. Nessa
+	 * hora quem le o botao e o RouterBOOT, que pode resetar a configuracao do
+	 * RouterOS, entrar em Netinstall ou, segurado por 20 s
+	 * (reformat-hold-button), reformatar a NAND.
+	 */
+	keys {
+		compatible = "gpio-keys";
+
+		reset {
+			label = "reset";
+			linux,code = <KEY_RESTART>;
+			gpios = <&gpio 16 GPIO_ACTIVE_LOW>;
+			/* filtra o ruido do contato (ms); valor da 16m.dtsi:20, nao medido */
+			debounce-interval = <60>;
+		};
+	};
+
+	/*
+	 * LED ligado direto ao SoC: so o azul do LED 1 (power) e comprovado.
+	 * Medido: GPIO4 em 0 acende o azul, em 1 apaga (ida e volta, duas vezes).
+	 * Mesmo pino e polaridade do LED power da mAP-2nD
+	 * (qca9533_mikrotik_routerboard-map-2nd.dts:21-26); na familia 95x o GPIO4
+	 * e um LED verde ativo em nivel alto.
+	 *
+	 * Nao descritos (ainda sem pino conhecido): os LEDs 2-5 e 8 e a segunda
+	 * cor do power ficaram presos acesos depois de um teste em que todos os
+	 * GPIOs voltaram ao valor original, o que sugere um chip que guarda estado
+	 * (registrador tipo 74hc595 no SPI ou o nRF52832) - hipotese. O LED 7 (LTE)
+	 * e comandado pelo proprio modem. Os LEDs 6 e 9 nao foram vistos acesos.
+	 */
+	leds {
+		compatible = "gpio-leds";
+
+		led_power: power {
+			label = "blue:power";
+			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
+			/* acende assim que o driver carrega (como na mAP-2nD) */
+			default-state = "on";
+		};
 	};
 
 	chosen {
 		/*
-		 * evid: baud-rate 115200 do RouterBOOT (ficha 03, C); ttyS0 (ficha 05, C).
-		 * O kernel le daqui: CONFIG_MIPS_CMDLINE_FROM_DTB=y (config-6.12:120).
-		 * Mesmo valor de qca953x.dtsi:11-13, repetido para a evidencia ficar aqui.
+		 * Console serial: ttyS0 a 115200 (baud-rate do RouterBOOT desta
+		 * unidade). O kernel le daqui: CONFIG_MIPS_CMDLINE_FROM_DTB=y
+		 * (config-6.12:120). Mesmo valor de qca953x.dtsi:11-13.
 		 */
 		bootargs = "console=ttyS0,115200n8";
 	};
 };
 
-/* evid: ttyS0 existe no RouterOS (ficha 05, C); pinagem do console: desconhecida */
-/* ref: qca9531_glinet_gl-s200.dtsi:105-107 */
+/*
+ * UART do SoC (ttyS0, existe no RouterOS). Os pinos fisicos do console na
+ * placa ainda nao foram identificados. ref: qca9531_glinet_gl-s200.dtsi:105-107
+ */
 &uart {
 	status = "okay";
 };
 
 /*
- * Ethernet: 2 portas 10/100 (ficha 10, C), ambas em "switch1" no RouterOS
- * (ficha 10, C); switch interno do SoC: indicio (irq "switch0", ficha 05, e
- * SoC QCA9531), nao confirmado. PoE-out na Ether2 (ficha 10, C); porta de
- * PoE-in nao documentada pelo fabricante (ficha, I).
- * Topologia copiada da mAP-2nD (QCA9533, 2 portas, PoE-out numa delas):
- * ref: qca9533_mikrotik_routerboard-map-2nd.dts:106-115.
- * O commit que criou a mAP (e1223dbee3) registra: "ETH1 is connected to
- * eth1 and ETH2 is connected to eth0 via the embedded switch port 2".
+ * Ethernet: 2 portas 10/100 no switch interno do SoC (Atheros AR8229).
+ * Topologia igual a da mAP-2nD (qca9533_mikrotik_routerboard-map-2nd.dts:106-115;
+ * commit e1223dbee3: "ETH1 is connected to eth1 and ETH2 is connected to eth0
+ * via the embedded switch port 2").
  *
- * No KNOT a topologia e INFERIDA. Se valer: Ether1 = eth1 do Linux
- * (GMAC0 -> swphy0, com troca PHY0/PHY4) e Ether2 = eth0 do Linux (GMAC1,
- * fixed-link 1000 ate o switch, herdado de qca953x.dtsi:279-292).
- * Confirmar na bancada, so com a Ether1 cabeada: eth1 com carrier e link
- * de 100 Mb/s. O eth0 tem carrier sempre (fixed-link), entao nao prova nada;
- * as portas do switch aparecem em "swconfig dev switch0 show".
- *
- * Alternativa real: padrao 951ui/hEX lite (&eth0 -> swphy4, sem troca;
- * qca9533_mikrotik_routerboard-95x.dtsi:92-96). Sem "gmac-config" o driver
- * nao toca o ETH_CFG (ag71xx_gmac.c:30-31) e a troca fica como o RouterBOOT
- * deixou. Fontes que decidiriam antes do boot: codigo GPL do RouterOS 7 para
- * o RB924; leitura de 0x18070000 num boot sem gmac-config.
- *
- * &eth1 (GMAC1) nao e sobrescrito: fica como em qca953x.dtsi (okay,
- * fixed-link), igual a mAP-2nD nesta versao.
+ * Medido no KNOT (so a Ether1 cabeada): a Ether1 e o eth1 do Linux
+ * (19000000.eth = GMAC0), ligado ao PHY interno do switch com a troca
+ * PHY0/PHY4, link de 100 Mb/s full; o registrador ETH_CFG (0x18070000) mostra
+ * o bit SW_PHY_SWAP ligado. A Ether2 fica atras do eth0 (GMAC1, link fixo de
+ * 1 Gb/s ate o switch, herdado de qca953x.dtsi:279-292). A Ether2 tem PoE-out,
+ * ainda nao controlado por este DTS.
  */
 &eth0 {
 	status = "okay";
 
-	/* ref: map-2nd.dts:109; wap-2nd.dts:52 (Ether1 unica, mesmo padrao); INFERIDA */
+	/* GMAC0 usa o PHY 0 do switch (com a troca abaixo vira a porta da Ether1) */
 	phy-handle = <&swphy0>;
 
 	gmac-config {
 		device = <&gmac>;
-		/* ref: map-2nd.dts:111-114; gmac "qca,ar9330-gmac" (qca953x.dtsi:148-151)
-		 * -> ag71xx_gmac.c:39-48,119-120; INFERIDA */
+		/* liga SW_PHY_SWAP no ETH_CFG: ag71xx_gmac.c:39-48 (qca,ar9330-gmac) */
 		switch-phy-swap = <1>;
 	};
 };
