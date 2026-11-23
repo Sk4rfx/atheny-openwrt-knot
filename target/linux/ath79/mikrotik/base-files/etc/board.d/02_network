@@ -44,6 +44,9 @@ ath79_setup_interfaces()
 		ucidef_add_switch "switch0" \
 			"0@eth0" "1:lan:4" "2:lan:3" "3:lan:2" "4:lan:1"
 		;;
+	# KNOT r2: as duas portas (Ether1 e Ether2) ficam juntas na rede 'lan'
+	# (eth0 e eth1). Na placa, a Ether1 e o eth1 (testado). Nao ha porta 'wan'.
+	# Mesma regra da mAP-2nD, que tem a mesma ligacao ao switch interno.
 	mikrotik,routerboard-924i-2nd-bt5-bg77-r2|\
 	mikrotik,routerboard-map-2nd)
 		ucidef_set_interface_lan "eth0 eth1"
@@ -71,6 +74,10 @@ ath79_setup_macs()
 	local mac_base="$(cat /sys/firmware/mikrotik/hard_config/mac_base)"
 
 	case "$board" in
+	# KNOT r2: o MAC vem do hard_config da flash da MikroTik (mac_base). Sem o
+	# no da flash NOR no DTS esse arquivo nao existe e o MAC e aleatorio a cada
+	# boot (foi assim no Marco 1). Com a NOR e a hard_config descritas, o lan
+	# passa a usar o mac_base verdadeiro.
 	mikrotik,routerboard-911-lite|\
 	mikrotik,routerboard-911g-5hpacd|\
 	mikrotik,routerboard-911g-xhpnd|\

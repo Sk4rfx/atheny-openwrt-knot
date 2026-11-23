@@ -94,6 +94,19 @@ TARGET_DEVICES += mikrotik_routerboard-922uags-5hpacd
 # Bring-up only: initramfs ELF for netboot. No sysupgrade image on purpose,
 # because the NAND layout of this board is still unknown. Without a flash node
 # there is no hard_config, so the MAC address is random on every boot.
+# KNOT r2 (RB924i-2nD-BT5&BG77), 64 MiB de RAM, 128 MiB de SPI-NAND.
+# Cada linha do bloco abaixo:
+#  - Device/mikrotik: herda o padrao do subtarget (nao usa Device/mikrotik_nor
+#    nem _nand, que montam imagem de sysupgrade para flash ja mapeada).
+#  - SOC: o chip QCA9531; define o arquivo DTS (qca9531_mikrotik_<nome>.dts).
+#  - DEVICE_MODEL/VARIANT: nome que aparece no nome da imagem e no OpenWrt.
+#  - DEVICE_PACKAGES: tira o Wi-Fi (ath9k, wpad) e o yafut (grava em
+#    NAND/YAFFS), pois ainda nao ha DTS de Wi-Fi nem da NAND.
+#  - IMAGES vazio: so a imagem initramfs (roda em RAM) e gerada; sem imagem
+#    de sysupgrade, para ninguem gravar na NAND por engano.
+#  - DEFAULT := n: fica fora das imagens geradas por padrao; so e
+#    construida quando o perfil e escolhido de proposito.
+# Testado na placa: o initramfs desta receita iniciou o OpenWrt em RAM pela Ether1.
 define Device/mikrotik_routerboard-924i-2nd-bt5-bg77-r2
   $(Device/mikrotik)
   SOC := qca9531
