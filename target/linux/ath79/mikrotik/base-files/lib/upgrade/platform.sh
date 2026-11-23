@@ -29,6 +29,10 @@ platform_check_image() {
 	local board=$(board_name)
 
 	case "$board" in
+	mikrotik,routerboard-924i-2nd-bt5-bg77-r2)
+		v "Bring-up board: sysupgrade not supported yet (flash layout unknown)"
+		return 1
+		;;
 	mikrotik,routerboard-2011uias-2hnd|\
 	mikrotik,routerboard-493g|\
 	mikrotik,routerboard-911g-5hpacd|\
@@ -72,6 +76,10 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
+	mikrotik,routerboard-924i-2nd-bt5-bg77-r2)
+		v "Bring-up board: sysupgrade not supported yet (flash layout unknown)"
+		return 1
+		;;
 	mikrotik,routerboard-2011uias-2hnd|\
 	mikrotik,routerboard-493g|\
 	mikrotik,routerboard-911g-5hpacd|\

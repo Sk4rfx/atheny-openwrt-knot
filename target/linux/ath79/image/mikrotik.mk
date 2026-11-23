@@ -91,6 +91,20 @@ define Device/mikrotik_routerboard-922uags-5hpacd
 endef
 TARGET_DEVICES += mikrotik_routerboard-922uags-5hpacd
 
+# Bring-up only: initramfs ELF for netboot. No sysupgrade image on purpose,
+# because the NAND layout of this board is still unknown. Without a flash node
+# there is no hard_config, so the MAC address is random on every boot.
+define Device/mikrotik_routerboard-924i-2nd-bt5-bg77-r2
+  $(Device/mikrotik)
+  SOC := qca9531
+  DEVICE_MODEL := RouterBOARD 924i-2nD-BT5&BG77 (KNOT)
+  DEVICE_VARIANT := r2
+  DEVICE_PACKAGES += -kmod-ath9k -wpad-basic-mbedtls -yafut
+  IMAGES :=
+  DEFAULT := n
+endef
+TARGET_DEVICES += mikrotik_routerboard-924i-2nd-bt5-bg77-r2
+
 define Device/mikrotik_routerboard-951g-2hnd
   $(Device/mikrotik_nand)
   SOC := ar9344

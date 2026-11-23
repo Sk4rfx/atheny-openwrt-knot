@@ -44,6 +44,7 @@ ath79_setup_interfaces()
 		ucidef_add_switch "switch0" \
 			"0@eth0" "1:lan:4" "2:lan:3" "3:lan:2" "4:lan:1"
 		;;
+	mikrotik,routerboard-924i-2nd-bt5-bg77-r2|\
 	mikrotik,routerboard-map-2nd)
 		ucidef_set_interface_lan "eth0 eth1"
 		;;
@@ -74,6 +75,7 @@ ath79_setup_macs()
 	mikrotik,routerboard-911g-5hpacd|\
 	mikrotik,routerboard-911g-xhpnd|\
 	mikrotik,routerboard-912uag-2hpnd|\
+	mikrotik,routerboard-924i-2nd-bt5-bg77-r2|\
 	mikrotik,routerboard-lhg-2nd|\
 	mikrotik,routerboard-lhg-5nd|\
 	mikrotik,routerboard-map-2nd|\
