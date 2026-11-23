@@ -2,14 +2,15 @@
 /*
  * MikroTik KNOT RB924i-2nD-BT5&BG77, revisao r2: suporte MINIMO para boot em
  * RAM (initramfs pela Ether1). Descrito aqui: CPU, RAM, UART, Ethernet, botao
- * de reset (GPIO16) e o azul do LED power (GPIO4). Ainda NAO descritos: flash
- * (SPI-NOR e SPI-NAND), USB (hub, modem BG77, PL2303), Wi-Fi, Bluetooth, os
- * demais LEDs e o PoE-out da Ether2.
+ * de reset (GPIO16), o azul do LED power (GPIO4) e a SPI-NOR do RouterBOOT
+ * somente leitura (so a hard_config) e a SPI-NAND somente leitura. Ainda NAO
+ * descritos: USB (hub, modem BG77, PL2303), Wi-Fi, Bluetooth, os demais LEDs
+ * e o PoE-out da Ether2.
  *
  * Base: qca953x.dtsi direto, e nao qca9533_mikrotik_routerboard-16m.dtsi nem
- * -95x.dtsi, porque estes declaram SPI-NOR de 16 MiB com particao "firmware"
- * gravavel, LEDs num 74hc595 e gpio-export de PoE (gpio 14), nada disso
- * comprovado no KNOT. O botao e o LED power foram medidos nesta placa e estao
+ * -95x.dtsi, porque estes declaram a particao "firmware" gravavel na NOR e
+ * um 74hc595 no CS1, que aqui e a NAND. O PoE de saida (provavel GPIO14,
+ * como na 95x) ainda nao foi medido nesta placa. O botao e o LED power foram medidos nesta placa e estao
  * descritos abaixo.
  *
  * Evidencia citada como "medido": leituras numa unidade r2 com OpenWrt em RAM
@@ -26,8 +27,7 @@
 	/*
 	 * "qca9531": firmware-type informado pelo RouterOS desta unidade.
 	 * Sufixo -r2: as unidades sem revisao vistas ate agora sao "qca9531L" com
-	 * 16 MiB de flash (sem a SPI-NAND) e devem ganhar outro compatible quando
-	 * a flash entrar no DTS.
+	 * 16 MiB de flash (sem a SPI-NAND) e devem ter o seu proprio compatible.
 	 */
 	compatible = "mikrotik,routerboard-924i-2nd-bt5-bg77-r2", "qca,qca9531";
 	/* board KNOT, model RB924i-2nD-BT5&BG77, revision r2 (RouterOS desta unidade) */
@@ -59,7 +59,8 @@
 	 * Efeito no OpenWrt (KEY_RESTART -> /etc/rc.button/reset):
 	 *  - sistema ja no ar: toque curto (menos de 1 s) reinicia; segurar 5 s
 	 *    ou mais volta as configuracoes de fabrica, mas so com /overlay (OpenWrt
-	 *    instalado). Em RAM so o toque curto tem efeito.
+	 *    instalado). Em RAM so o toque curto tem efeito. (A imagem da Atheny
+	 *    troca os 5 s por 10 s com o seu proprio /etc/rc.button/reset.)
 	 *  - durante o comeco do boot (preinit), o botao pede o modo failsafe.
 	 * Cuidado: nunca segurar o botao enquanto o KNOT reinicia ou liga. Nessa
 	 * hora quem le o botao e o RouterBOOT, que pode resetar a configuracao do
@@ -85,11 +86,13 @@
 	 * (qca9533_mikrotik_routerboard-map-2nd.dts:21-26); na familia 95x o GPIO4
 	 * e um LED verde ativo em nivel alto.
 	 *
-	 * Nao descritos (ainda sem pino conhecido): os LEDs 2-5 e 8 e a segunda
-	 * cor do power ficaram presos acesos depois de um teste em que todos os
-	 * GPIOs voltaram ao valor original, o que sugere um chip que guarda estado
-	 * (registrador tipo 74hc595 no SPI ou o nRF52832) - hipotese. O LED 7 (LTE)
-	 * e comandado pelo proprio modem. Os LEDs 6 e 9 nao foram vistos acesos.
+	 * Ainda nao descritos: os LEDs 2-5 e 8 (Ether1, Ether2, PoE, Wi-Fi, GPS)
+	 * ficam num registrador de deslocamento no SPI, sem chip select proprio
+	 * (tabela de pinos do firmware de fabrica para esta placa; o latch
+	 * provavelmente e o GPIO11). Medido: um teste de GPIOs deixou esses LEDs
+	 * presos acesos, o que bate com um registrador que guarda estado. Falta
+	 * suporte a esse arranjo no driver SPI. O LED 7 (LTE) e comandado pelo
+	 * proprio modem. Os LEDs 6 e 9 nao foram vistos acesos.
 	 */
 	leds {
 		compatible = "gpio-leds";
@@ -118,6 +121,99 @@
  */
 &uart {
 	status = "okay";
+};
+
+/*
+ * Barramento SPI e a flash NOR do RouterBOOT, SOMENTE LEITURA.
+ *
+ * Medido (registradores de funcao dos GPIOs): o RouterBOOT deixa tres chip
+ * selects do SPI configurados (GPIO5 = CS0, GPIO1 = CS1, GPIO3 = CS2;
+ * GPIO6 = CLK, GPIO7 = MOSI, GPIO8 = provavel MISO). Medido pelo ID no
+ * dmesg: CS0 = NOR W25Q128JV (16 MiB), CS1 = SPI-NAND W25N01GV. CS2 = o
+ * nRF52832 (Bluetooth), pela lista de dispositivos do firmware de fabrica;
+ * nao descrito: o driver so o deixa inativo (spi-ar934x.c:189-191).
+ */
+&spi {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;				/* chip select 0 */
+		/* 300 MHz (AHB) / 12 = 25 MHz; valor da 92x, mesmo controlador */
+		spi-max-frequency = <25000000>;
+		/*
+		 * Se a NOR tiver mais de 16 MiB e entrar no modo de endereco de
+		 * 4 bytes, o kernel tenta devolve-la ao modo de 3 bytes num reboot
+		 * ordenado (spi-nor/core.c:3405-3423); sem isso o SoC poderia nao
+		 * achar o RouterBOOT num reboot quente (um corte de energia resolve).
+		 * Inofensivo em NOR pequena.
+		 */
+		broken-flash-reset;
+
+		/*
+		 * Particoes: o parser "mikrotik,routerboot-partitions" acha a
+		 * hard_config (dados de fabrica: MAC base, calibracao do Wi-Fi)
+		 * pelo conteudo, sem precisar saber o tamanho da NOR.
+		 *
+		 * Seguranca, achados da revisao:
+		 *  - o proprio conteiner "partitions" e read-only: o parser o
+		 *    registra como uma particao do tamanho da NOR inteira
+		 *    (routerbootpart.c:225-259; tamanho 0 = NOR inteira) e, sem
+		 *    read-only, ela seria gravavel por cima do RouterBOOT. As
+		 *    particoes de dentro herdam a falta de permissao (mtdpart.c:71).
+		 *    A familia 92x nao tem essa protecao.
+		 *  - so a hard_config e descrita nesta primeira leitura: com um
+		 *    filho so o parser nao tem como errar por sobreposicao; se
+		 *    errasse, o kernel registraria a NOR inteira gravavel
+		 *    (mtdpart.c:594-596, mtdcore.c:1109-1118). Routerboot, bios e
+		 *    soft_config entram depois de vermos os offsets reais.
+		 * Com isso o Linux nao tem nenhum dispositivo gravavel na NOR, e o
+		 * OpenWrt passa a ler o MAC verdadeiro (hard_config/mac_base, usado
+		 * pelo 02_network).
+		 */
+		partitions {
+			compatible = "mikrotik,routerboot-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			read-only;
+
+			/* dados de fabrica (MAC, calibracao); nunca gravar */
+			hard_config {
+				read-only;
+			};
+		};
+	};
+
+	/*
+	 * SPI-NAND de 128 MiB (onde hoje esta o RouterOS), SOMENTE LEITURA.
+	 * Chip: Winbond W25N01GV no chip select 1, medido (ID ef aa 21 no dmesg,
+	 * 128 MiB, 0 blocos ruins). Tambem em U602 nas fotos internas da FCC do
+	 * kit KNOT LR9. Referencia: GL-AR300M, mesmo SoC, SPI-NAND no CS1
+	 * (qca9531_glinet_gl-ar300m.dtsi:141-161).
+	 *
+	 * Ao iniciar, o driver so escreve em registradores de configuracao do
+	 * chip, nunca na memoria de dados: tira o modo OTP, liga o modo de
+	 * leitura por buffer (winbond.c:298-306) e libera a protecao de blocos
+	 * (spinand_init_flash). Uma unica particao read-only cobre a NAND inteira;
+	 * o nome nao e "ubi" para o OpenWrt nao tentar montar nada nela.
+	 */
+	flash@1 {
+		compatible = "spi-nand";
+		reg = <1>;				/* chip select 1 */
+		spi-max-frequency = <25000000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "nand-leitura";
+				reg = <0x0 0x8000000>;		/* 128 MiB */
+				read-only;
+			};
+		};
+	};
 };
 
 /*
