@@ -29,13 +29,6 @@ platform_check_image() {
 	local board=$(board_name)
 
 	case "$board" in
-	# KNOT r2: recusa a checagem da imagem de atualizacao (sysupgrade). Sem o
-	# mapa da flash, gravar poderia apagar o RouterBOOT/RouterOS. 'return 1'
-	# = imagem rejeitada. A placa so roda em RAM por enquanto.
-	mikrotik,routerboard-924i-2nd-bt5-bg77-r2)
-		v "Bring-up board: sysupgrade not supported yet (flash layout unknown)"
-		return 1
-		;;
 	mikrotik,routerboard-2011uias-2hnd|\
 	mikrotik,routerboard-493g|\
 	mikrotik,routerboard-911g-5hpacd|\
@@ -43,6 +36,7 @@ platform_check_image() {
 	mikrotik,routerboard-912uag-2hpnd|\
 	mikrotik,routerboard-921gs-5hpacd-15s|\
 	mikrotik,routerboard-922uags-5hpacd|\
+	mikrotik,routerboard-924i-2nd-bt5-bg77-r2|\
 	mikrotik,routerboard-951g-2hnd|\
 	mikrotik,routerboard-951ui-2hnd|\
 	mikrotik,routerboard-sxt-5nd-r2)
@@ -79,12 +73,6 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
-	# KNOT r2: segunda trava, na hora da gravacao: mesmo que a checagem acima
-	# fosse contornada, nada e gravado. 'return 1' = falha, sem tocar na flash.
-	mikrotik,routerboard-924i-2nd-bt5-bg77-r2)
-		v "Bring-up board: sysupgrade not supported yet (flash layout unknown)"
-		return 1
-		;;
 	mikrotik,routerboard-2011uias-2hnd|\
 	mikrotik,routerboard-493g|\
 	mikrotik,routerboard-911g-5hpacd|\
@@ -92,6 +80,7 @@ platform_do_upgrade() {
 	mikrotik,routerboard-912uag-2hpnd|\
 	mikrotik,routerboard-921gs-5hpacd-15s|\
 	mikrotik,routerboard-922uags-5hpacd|\
+	mikrotik,routerboard-924i-2nd-bt5-bg77-r2|\
 	mikrotik,routerboard-951g-2hnd|\
 	mikrotik,routerboard-951ui-2hnd|\
 	mikrotik,routerboard-sxt-5nd-r2)

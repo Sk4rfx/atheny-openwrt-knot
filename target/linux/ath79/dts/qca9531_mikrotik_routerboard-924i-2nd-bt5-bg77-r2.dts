@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
 /*
- * MikroTik KNOT RB924i-2nD-BT5&BG77, revisao r2: suporte MINIMO para boot em
- * RAM (initramfs pela Ether1). Descrito aqui: CPU, RAM, UART, Ethernet, botao
- * de reset (GPIO16), o azul do LED power (GPIO4) e a SPI-NOR do RouterBOOT
- * somente leitura (so a hard_config) e a SPI-NAND somente leitura. Ainda NAO
- * descritos: USB (hub, modem BG77, PL2303), Wi-Fi, Bluetooth, os demais LEDs
- * e o PoE-out da Ether2.
+ * MikroTik KNOT RB924i-2nD-BT5&BG77, revisao r2. Descrito aqui: CPU, RAM,
+ * UART, Ethernet, botao de reset (GPIO16), o azul do LED power (GPIO4), a
+ * SPI-NOR do RouterBOOT somente leitura (so a hard_config) e a SPI-NAND com
+ * as particoes de instalacao (kernel em YAFFS + ubi). Ainda NAO descritos:
+ * USB (hub, modem BG77, PL2303), Wi-Fi, Bluetooth, os demais LEDs e o
+ * PoE-out da Ether2.
  *
  * Base: qca953x.dtsi direto, e nao qca9533_mikrotik_routerboard-16m.dtsi nem
  * -95x.dtsi, porque estes declaram a particao "firmware" gravavel na NOR e
  * um 74hc595 no CS1, que aqui e a NAND. O PoE de saida (provavel GPIO14,
- * como na 95x) ainda nao foi medido nesta placa. O botao e o LED power foram medidos nesta placa e estao
- * descritos abaixo.
+ * como na 95x) ainda nao foi medido nesta placa. O botao e o LED power foram
+ * medidos nesta placa e estao descritos abaixo.
  *
  * Evidencia citada como "medido": leituras numa unidade r2 com OpenWrt em RAM
  * (registradores de GPIO via devmem, sysfs, swconfig, ethtool), 2026-11-23.
@@ -41,8 +41,7 @@
 		 * LEDs de estado do OpenWrt (etc/diag.sh): o LED power pisca no boot,
 		 * pisca rapido no modo failsafe, fica aceso com o sistema pronto e
 		 * pisca durante atualizacao. Sem esses aliases o OpenWrt nao teria
-		 * nenhum LED para sinalizar o proprio estado. (O sysupgrade desta
-		 * placa continua bloqueado; o alias de upgrade e so visual.)
+		 * nenhum LED para sinalizar o proprio estado.
 		 */
 		led-boot = &led_power;
 		led-failsafe = &led_power;
@@ -185,17 +184,26 @@
 	};
 
 	/*
-	 * SPI-NAND de 128 MiB (onde hoje esta o RouterOS), SOMENTE LEITURA.
+	 * SPI-NAND de 128 MiB: onde o OpenWrt e instalado.
 	 * Chip: Winbond W25N01GV no chip select 1, medido (ID ef aa 21 no dmesg,
-	 * 128 MiB, 0 blocos ruins). Tambem em U602 nas fotos internas da FCC do
-	 * kit KNOT LR9. Referencia: GL-AR300M, mesmo SoC, SPI-NAND no CS1
-	 * (qca9531_glinet_gl-ar300m.dtsi:141-161).
+	 * 128 MiB, 0 blocos ruins, oobavail 24). Tambem em U602 nas fotos internas
+	 * da FCC do kit KNOT LR9. Referencia: GL-AR300M, mesmo SoC, SPI-NAND no
+	 * CS1 (qca9531_glinet_gl-ar300m.dtsi:141-161).
 	 *
-	 * Ao iniciar, o driver so escreve em registradores de configuracao do
-	 * chip, nunca na memoria de dados: tira o modo OTP, liga o modo de
-	 * leitura por buffer (winbond.c:298-306) e libera a protecao de blocos
-	 * (spinand_init_flash). Uma unica particao read-only cobre a NAND inteira;
-	 * o nome nao e "ubi" para o OpenWrt nao tentar montar nada nela.
+	 * Particoes (docs: layout-nand.md, medido em dois dumps desta unidade):
+	 *  - kernel (0 - 4 MiB): YAFFS2 com o arquivo "kernel" (ELF), que o
+	 *    RouterBOOT abre ao ligar. E a mesma area que o RouterOS usa nesta
+	 *    placa (YAFFS2 com tags inband, 2032 B de dados por pagina, medido
+	 *    nos dumps). Pelo codigo do yafut, ele escolhe esse mesmo formato
+	 *    sozinho porque oobavail = 24 < 28 (falta confirmar gravando).
+	 *    Diferente da 92x, aqui nao ha area "booter" no inicio da NAND: o
+	 *    RouterBOOT fica na NOR e o RouterOS grava o kernel a partir do
+	 *    bloco 0.
+	 *  - ubi (4 MiB - 128 MiB): rootfs (squashfs) e rootfs_data.
+	 * O kernel so anexa o UBI sozinho quando o primeiro bloco bom do "ubi"
+	 * comeca com a assinatura UBI# (patch 490 do generic). Com o RouterOS
+	 * ainda na NAND isso nao acontece: a instalacao formata o "ubi" com
+	 * ubiformat e grava o kernel no YAFFS com o yafut.
 	 */
 	flash@1 {
 		compatible = "spi-nand";
@@ -208,9 +216,13 @@
 			#size-cells = <1>;
 
 			partition@0 {
-				label = "nand-leitura";
-				reg = <0x0 0x8000000>;		/* 128 MiB */
-				read-only;
+				label = "kernel";
+				reg = <0x0 0x400000>;		/* 4 MiB */
+			};
+
+			partition@400000 {
+				label = "ubi";
+				reg = <0x400000 0x7c00000>;	/* 124 MiB */
 			};
 		};
 	};

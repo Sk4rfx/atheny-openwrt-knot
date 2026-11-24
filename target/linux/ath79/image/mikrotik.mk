@@ -91,29 +91,30 @@ define Device/mikrotik_routerboard-922uags-5hpacd
 endef
 TARGET_DEVICES += mikrotik_routerboard-922uags-5hpacd
 
-# Bring-up only: initramfs ELF for netboot. No sysupgrade image on purpose,
-# because the NAND layout of this board is still unknown. Without a flash node
-# there is no hard_config, so the MAC address is random on every boot.
 # KNOT r2 (RB924i-2nD-BT5&BG77), 64 MiB de RAM, 128 MiB de SPI-NAND.
 # Cada linha do bloco abaixo:
-#  - Device/mikrotik: herda o padrao do subtarget (nao usa Device/mikrotik_nor
-#    nem _nand, que montam imagem de sysupgrade para flash ja mapeada).
+#  - Device/mikrotik_nand: receita das MikroTik com NAND. O sysupgrade.bin e um
+#    tar com "kernel" (vai para o YAFFS da particao kernel, gravado pelo yafut)
+#    e "root" (vai para o UBI).
+#  - KERNEL: o mesmo da Device/mikrotik (ELF vmlinuz + DTB) com check-size. A
+#    particao kernel tem 4 MiB, mas o YAFFS guarda 2032 B por pagina, reserva
+#    2 blocos e usa 1 pagina por bloco para o resumo. Medido com o yafut do
+#    host numa imagem de 4 MiB com a mesma geometria: cabem ~3.835.000 B, e
+#    ~3.831.000 B gravando por cima. 3584k deixa ~160 KB de folga.
 #  - SOC: o chip QCA9531; define o arquivo DTS (qca9531_mikrotik_<nome>.dts).
 #  - DEVICE_MODEL/VARIANT: nome que aparece no nome da imagem e no OpenWrt.
-#  - DEVICE_PACKAGES: tira o Wi-Fi (ath9k, wpad) e o yafut (grava em
-#    NAND/YAFFS), pois ainda nao ha DTS de Wi-Fi nem da NAND.
-#  - IMAGES vazio: so a imagem initramfs (roda em RAM) e gerada; sem imagem
-#    de sysupgrade, para ninguem gravar na NAND por engano.
+#  - DEVICE_PACKAGES: tira o Wi-Fi (ath9k, wpad), ainda sem DTS de Wi-Fi.
 #  - DEFAULT := n: fica fora das imagens geradas por padrao; so e
 #    construida quando o perfil e escolhido de proposito.
-# Testado na placa: o initramfs desta receita iniciou o OpenWrt em RAM pela Ether1.
+# Testado na placa: o initramfs iniciou o OpenWrt em RAM pela Ether1. O boot
+# pela NAND (kernel no YAFFS + rootfs no UBI) ainda nao foi testado.
 define Device/mikrotik_routerboard-924i-2nd-bt5-bg77-r2
-  $(Device/mikrotik)
+  $(Device/mikrotik_nand)
   SOC := qca9531
   DEVICE_MODEL := RouterBOARD 924i-2nD-BT5&BG77 (KNOT)
   DEVICE_VARIANT := r2
-  DEVICE_PACKAGES += -kmod-ath9k -wpad-basic-mbedtls -yafut
-  IMAGES :=
+  KERNEL := kernel-bin | append-dtb-elf | check-size 3584k
+  DEVICE_PACKAGES += -kmod-ath9k -wpad-basic-mbedtls
   DEFAULT := n
 endef
 TARGET_DEVICES += mikrotik_routerboard-924i-2nd-bt5-bg77-r2
