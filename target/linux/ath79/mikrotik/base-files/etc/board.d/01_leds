@@ -32,6 +32,12 @@ mikrotik,routerboard-912uag-2hpnd)
 	ucidef_set_led_rssi "rssimediumhigh" "rssimediumhigh" "green:led4" "wlan0" "60" "100"
 	ucidef_set_led_rssi "rssihigh" "rssihigh" "green:led5" "wlan0" "80" "100"
 	;;
+mikrotik,routerboard-924i-2nd-bt5-bg77-r2)
+	# KNOT r2: Ether1 = eth1; Ether2 = porta 2 do switch, como na mAP-2nD
+	ucidef_set_led_netdev "ether1" "ether1" "green:ether1" "eth1"
+	ucidef_set_led_switch "ether2" "ether2" "green:ether2" "switch0" "0x4"
+	ucidef_set_led_wlan "wlan" "wlan" "green:wlan" "phy0tpt"
+	;;
 mikrotik,routerboard-750-r2|\
 mikrotik,routerboard-951ui-2hnd|\
 mikrotik,routerboard-951ui-2nd|\

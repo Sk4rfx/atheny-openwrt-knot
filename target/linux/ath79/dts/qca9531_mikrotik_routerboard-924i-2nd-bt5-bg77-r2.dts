@@ -102,6 +102,37 @@
 			/* acende assim que o driver carrega (como na mAP-2nD) */
 			default-state = "on";
 		};
+
+		/*
+		 * LEDs no registrador (gpio_ssr), todos ativos em baixo pela tabela
+		 * de fabrica. Cores e posicoes vistas no teste em RAM (2026-11-24),
+		 * cada LED aceso sozinho: ether1 = LED 2, ether2 = 3, poe = 4
+		 * (vermelho), gps = 8, wlan = 5.
+		 */
+		ether1 {
+			label = "green:ether1";
+			gpios = <&gpio_ssr 0 GPIO_ACTIVE_LOW>;
+		};
+
+		ether2 {
+			label = "green:ether2";
+			gpios = <&gpio_ssr 1 GPIO_ACTIVE_LOW>;
+		};
+
+		poe {
+			label = "red:poe";
+			gpios = <&gpio_ssr 2 GPIO_ACTIVE_LOW>;
+		};
+
+		gps {
+			label = "green:gps";
+			gpios = <&gpio_ssr 3 GPIO_ACTIVE_LOW>;
+		};
+
+		wlan {
+			label = "green:wlan";
+			gpios = <&gpio_ssr 4 GPIO_ACTIVE_LOW>;
+		};
 	};
 
 	chosen {
@@ -134,6 +165,12 @@
  */
 &spi {
 	status = "okay";
+
+	/*
+	 * CS0-CS2 nativos; CS3 = GPIO11, a selecao/latch do registrador de
+	 * LEDs (precisa do patch 941-spi-ar934x-support-gpio-chip-selects).
+	 */
+	cs-gpios = <0>, <0>, <0>, <&gpio 11 GPIO_ACTIVE_LOW>;
 
 	flash@0 {
 		compatible = "jedec,spi-nor";
@@ -226,6 +263,60 @@
 			};
 		};
 	};
+
+	/*
+	 * Registrador de deslocamento (74hc595, 8 saidas) dos LEDs e de dois
+	 * controles do modem, sem chip select proprio: recebe todo o trafego do
+	 * SPI e so copia para as saidas na subida do GPIO11. Pela lista de
+	 * dispositivos do firmware de fabrica para esta placa (ficha-knot-r2.md,
+	 * fim): "rb400-spi-misc" a 8 MHz, dados {11, 1, 0x7f} = GPIO11, 1
+	 * registrador, valor inicial 0x7f. Saidas 0-4: LEDs; 5: hub USB;
+	 * 6: uart-select; 7: mpcie-power-off (alimentacao do modem).
+	 * Medido em RAM (2026-11-24): os 5 LEDs e o hub USB respondem.
+	 */
+	gpio_ssr: gpio-ssr@3 {
+		compatible = "fairchild,74hc595";
+		reg = <3>;				/* CS3 = GPIO11 */
+		gpio-controller;
+		#gpio-cells = <2>;
+		registers-number = <1>;
+		spi-max-frequency = <8000000>;
+
+		/*
+		 * O driver zera as saidas no probe (modem sem energia por um
+		 * instante); o hog religa logo em seguida. Ativo em baixo pela
+		 * tabela de fabrica: logico 0 = pino em 1 = modem alimentado.
+		 */
+		mpcie-power-off-hog {
+			gpio-hog;
+			gpios = <7 GPIO_ACTIVE_LOW>;
+			output-low;
+			line-name = "mpcie-power-off";
+		};
+
+		/*
+		 * Saida 5: libera o hub USB (alimentacao ou reset). Fora da tabela
+		 * de pinos da r2, mas o valor inicial de fabrica (0x7f) a deixa em
+		 * 1; na variante de 16 MiB a mesma saida e "mpcie-power-off",
+		 * ativa em baixo. Medido (2026-11-24, OpenWrt em RAM): em 0 o hub
+		 * nao responde (error -71) e nada aparece no USB; em 1 o hub, o
+		 * PL2303 e o modem enumeram.
+		 */
+		usb-hub-hog {
+			gpio-hog;
+			gpios = <5 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "usb-hub";
+		};
+
+		/* valor do firmware de fabrica (bit 6 de 0x7f) */
+		uart-select-hog {
+			gpio-hog;
+			gpios = <6 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "uart-select";
+		};
+	};
 };
 
 /*
@@ -262,7 +353,8 @@
  *    gpio-export,output e o nivel fisico (o driver grava sem inverter): 0,
  *    o mesmo que o RouterBOOT deixa. Medido (2026-11-24): com o pino em 1
  *    desde o boot ou em 0, o hub, o PL2303 e o modem enumeram do mesmo
- *    jeito; o efeito real deste pino nesta placa ainda nao foi visto.
+ *    jeito; quem libera o hub nesta placa e a saida 5 do registrador de
+ *    LEDs (gpio_ssr, abaixo).
  *  - lte-reset: GPIO17, reset do modem BG77, ativo em nivel alto; saida 0
  *    (nivel fisico) = modem rodando. Medido
  *    (2026-11-24, OpenWrt em RAM): o RouterBOOT deixa o GPIO17 em 1 e o modem
