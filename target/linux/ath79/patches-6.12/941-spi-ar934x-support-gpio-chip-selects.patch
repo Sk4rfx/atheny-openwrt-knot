@@ -1,0 +1,114 @@
+From: Willian G. Silva <sk4rfx@proton.me>
+Subject: spi: ar934x: support GPIO chip selects beyond the native ones
+
+Some MikroTik boards (e.g. the KNOT r2) hang a 74HC595 shift register on
+the SPI bus after all three native chip selects are taken (NOR, NAND and
+a Bluetooth SoC): it is clocked by the bus and latched by a separate
+GPIO. Let such devices use a chip select number past the native lines
+with a GPIO from "cs-gpios": the GPIO is asserted around the message and
+the shift runs without any native chip select bit.
+
+The controller only opts in to GPIO chip selects when "cs-gpios" lists more
+entries than native lines, and GPIOs listed for a native chip select keep
+the native behaviour, so boards like the MikroTik hEX lite (which lists a
+GPIO for its muxed CS1) are unchanged.
+
+Signed-off-by: Willian G. Silva <sk4rfx@proton.me>
+---
+--- a/drivers/spi/spi-ar934x.c
++++ b/drivers/spi/spi-ar934x.c
+@@ -10,6 +10,7 @@
+ // Copyright (C) 2014-2015 Felix Fietkau <nbd@nbd.name>
+ 
+ #include <linux/clk.h>
++#include <linux/gpio/consumer.h>
+ #include <linux/io.h>
+ #include <linux/iopoll.h>
+ #include <linux/kernel.h>
+@@ -20,6 +21,8 @@
+ 
+ #define DRIVER_NAME "spi-ar934x"
+ 
++#define AR934X_SPI_NUM_NATIVE_CS	3
++
+ #define AR934X_SPI_REG_FS		0x00
+ #define AR934X_SPI_ENABLE		BIT(0)
+ 
+@@ -38,6 +41,9 @@
+ #define AR934X_SPI_SHIFT_VAL(cs, term, count)			\
+ 	(AR934X_SPI_SHIFT_EN | AR934X_SPI_SHIFT_CS(cs) |	\
+ 	(term) << AR934X_SPI_SHIFT_TERM | (count))
++/* shift without asserting any native chip select (GPIO chip select) */
++#define AR934X_SPI_SHIFT_VAL_NOCS(term, count)			\
++	(AR934X_SPI_SHIFT_EN | (term) << AR934X_SPI_SHIFT_TERM | (count))
+ 
+ #define AR934X_SPI_DATAIN 0x18
+ 
+@@ -81,6 +87,7 @@
+ 	struct ar934x_spi *sp = spi_controller_get_devdata(ctlr);
+ 	struct spi_transfer *t = NULL;
+ 	struct spi_device *spi = m->spi;
++	struct gpio_desc *cs_gpiod = NULL;
+ 	unsigned long trx_done, trx_cur;
+ 	int stat = 0;
+ 	u8 bpw, term = 0;
+@@ -89,7 +96,18 @@
+ 	const u8 *tx_buf;
+ 	u8 *buf;
+ 
++	/*
++	 * Only chip selects beyond the native lines are driven as GPIOs. A GPIO
++	 * listed for a native chip select (pin muxed to the SPI CS function)
++	 * keeps the native behaviour.
++	 */
++	if (spi_get_chipselect(spi, 0) >= AR934X_SPI_NUM_NATIVE_CS)
++		cs_gpiod = spi_get_csgpiod(spi, 0);
++
+ 	m->actual_length = 0;
++	if (cs_gpiod)
++		gpiod_set_value_cansleep(cs_gpiod, 1);
++
+ 	list_for_each_entry(t, &m->transfers, transfer_list) {
+ 		if (t->bits_per_word >= 8 && t->bits_per_word < 32)
+ 			bpw = t->bits_per_word >> 3;
+@@ -126,8 +144,11 @@
+ 				iowrite32(reg, sp->base + AR934X_SPI_DATAOUT);
+ 			}
+ 
+-			reg = AR934X_SPI_SHIFT_VAL(spi_get_chipselect(spi, 0), term,
+-						   trx_cur * 8);
++			if (cs_gpiod)
++				reg = AR934X_SPI_SHIFT_VAL_NOCS(term, trx_cur * 8);
++			else
++				reg = AR934X_SPI_SHIFT_VAL(spi_get_chipselect(spi, 0),
++							   term, trx_cur * 8);
+ 			iowrite32(reg, sp->base + AR934X_SPI_REG_SHIFT_CTRL);
+ 			stat = readl_poll_timeout(
+ 				sp->base + AR934X_SPI_REG_SHIFT_CTRL, reg,
+@@ -150,6 +171,9 @@
+ 	}
+ 
+ msg_done:
++	if (cs_gpiod)
++		gpiod_set_value_cansleep(cs_gpiod, 0);
++
+ 	m->status = stat;
+ 	spi_finalize_current_message(ctlr);
+ 
+@@ -196,7 +220,15 @@
+ 	ctlr->bits_per_word_mask = SPI_BPW_MASK(32) | SPI_BPW_MASK(24) |
+ 				   SPI_BPW_MASK(16) | SPI_BPW_MASK(8);
+ 	ctlr->dev.of_node = pdev->dev.of_node;
+-	ctlr->num_chipselect = 3;
++	ctlr->num_chipselect = AR934X_SPI_NUM_NATIVE_CS;
++	/*
++	 * Chip selects beyond the native ones may come from "cs-gpios". Only
++	 * opt in when the property lists more entries than native lines, so
++	 * boards that list a GPIO for a native (muxed) chip select keep their
++	 * current behaviour.
++	 */
++	if (gpiod_count(&pdev->dev, "cs") > AR934X_SPI_NUM_NATIVE_CS)
++		ctlr->use_gpio_descriptors = true;
+ 
+ 	dev_set_drvdata(&pdev->dev, ctlr);
+ 
