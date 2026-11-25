@@ -103,18 +103,21 @@ TARGET_DEVICES += mikrotik_routerboard-922uags-5hpacd
 #    ~3.831.000 B gravando por cima. 3584k deixa ~160 KB de folga.
 #  - SOC: o chip QCA9531; define o arquivo DTS (qca9531_mikrotik_<nome>.dts).
 #  - DEVICE_MODEL/VARIANT: nome que aparece no nome da imagem e no OpenWrt.
-#  - DEVICE_PACKAGES: tira o Wi-Fi (ath9k, wpad), ainda sem DTS de Wi-Fi.
+#  - DEVICE_PACKAGES: USB 2.0 (kmod-usb2), o conversor serial PL2303
+#    (kmod-usb-serial-pl2303) e as portas seriais do modem BG77
+#    (kmod-usb-serial-option; quais interfaces sao AT/NMEA: a observar). O Wi-Fi (ath9k, wpad) vem do padrao do
+#    subtarget.
 #  - DEFAULT := n: fica fora das imagens geradas por padrao; so e
 #    construida quando o perfil e escolhido de proposito.
-# Testado na placa: o initramfs iniciou o OpenWrt em RAM pela Ether1. O boot
-# pela NAND (kernel no YAFFS + rootfs no UBI) ainda nao foi testado.
+# Testado na placa: o initramfs iniciou o OpenWrt em RAM pela Ether1, e a
+# instalacao na NAND (kernel no YAFFS + rootfs no UBI) inicia sozinha.
 define Device/mikrotik_routerboard-924i-2nd-bt5-bg77-r2
   $(Device/mikrotik_nand)
   SOC := qca9531
   DEVICE_MODEL := RouterBOARD 924i-2nD-BT5&BG77 (KNOT)
   DEVICE_VARIANT := r2
   KERNEL := kernel-bin | append-dtb-elf | check-size 3584k
-  DEVICE_PACKAGES += -kmod-ath9k -wpad-basic-mbedtls
+  DEVICE_PACKAGES += kmod-usb2 kmod-usb-serial-option kmod-usb-serial-pl2303
   DEFAULT := n
 endef
 TARGET_DEVICES += mikrotik_routerboard-924i-2nd-bt5-bg77-r2

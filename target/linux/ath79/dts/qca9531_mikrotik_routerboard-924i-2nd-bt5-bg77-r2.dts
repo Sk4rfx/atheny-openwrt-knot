@@ -2,10 +2,10 @@
 /*
  * MikroTik KNOT RB924i-2nD-BT5&BG77, revisao r2. Descrito aqui: CPU, RAM,
  * UART, Ethernet, botao de reset (GPIO16), o azul do LED power (GPIO4), a
- * SPI-NOR do RouterBOOT somente leitura (so a hard_config) e a SPI-NAND com
- * as particoes de instalacao (kernel em YAFFS + ubi). Ainda NAO descritos:
- * USB (hub, modem BG77, PL2303), Wi-Fi, Bluetooth, os demais LEDs e o
- * PoE-out da Ether2.
+ * SPI-NOR do RouterBOOT somente leitura (so a hard_config), a SPI-NAND com
+ * as particoes de instalacao (kernel em YAFFS + ubi), o USB (hub, modem
+ * BG77, PL2303) e o Wi-Fi. Ainda NAO descritos: Bluetooth (nRF52832), os
+ * demais LEDs e o PoE-out da Ether2.
  *
  * Base: qca953x.dtsi direto, e nao qca9533_mikrotik_routerboard-16m.dtsi nem
  * -95x.dtsi, porque estes declaram a particao "firmware" gravavel na NOR e
@@ -252,4 +252,72 @@
 		/* liga SW_PHY_SWAP no ETH_CFG: ag71xx_gmac.c:39-48 (qca,ar9330-gmac) */
 		switch-phy-swap = <1>;
 	};
+};
+
+/*
+ * Controles do USB e do modem, exportados para o userspace (/sys/class/gpio),
+ * como o usb_power da familia 95x (qca9533_mikrotik_routerboard-95x.dtsi:48-62):
+ *  - usb-power: GPIO13, "usb-power-off" ativo em nivel alto na tabela de
+ *    pinos do firmware de fabrica, ou seja, power ativo em baixo.
+ *    gpio-export,output e o nivel fisico (o driver grava sem inverter): 0,
+ *    o mesmo que o RouterBOOT deixa. Medido (2026-11-24): com o pino em 1
+ *    desde o boot ou em 0, o hub, o PL2303 e o modem enumeram do mesmo
+ *    jeito; o efeito real deste pino nesta placa ainda nao foi visto.
+ *  - lte-reset: GPIO17, reset do modem BG77, ativo em nivel alto; saida 0
+ *    (nivel fisico) = modem rodando. Medido
+ *    (2026-11-24, OpenWrt em RAM): o RouterBOOT deixa o GPIO17 em 1 e o modem
+ *    fica reiniciando (aparece e some do USB a cada ~3,5 s); em 0 ele fica
+ *    estavel, responde a AT na interface 2, e o PL2303 tambem aparece.
+ */
+/ {
+	gpio-export {
+		compatible = "gpio-export";
+
+		usb_power {
+			gpio-export,name = "usb-power";
+			gpio-export,output = <0>;
+			gpios = <&gpio 13 GPIO_ACTIVE_LOW>;
+		};
+
+		lte_reset {
+			gpio-export,name = "lte-reset";
+			gpio-export,output = <0>;
+			gpios = <&gpio 17 GPIO_ACTIVE_HIGH>;
+		};
+	};
+};
+
+/*
+ * USB 2.0 do SoC. Atras dele (RouterOS desta unidade, /system resource usb):
+ * hub de 4 portas 14cd:8608, conversor USB-serial Prolific 067b:23a3
+ * (PL2303GC pelo ID, pl2303.h; a marcacao do chip e ilegivel) e o modem
+ * Quectel BG77 (2c7c:0700, driver option, mesma entrada do BG95). Mesmos
+ * nos da mAP-2nD (qca9533_mikrotik_routerboard-map-2nd.dts:117-123).
+ * O modem tambem depende do mpcie-power-off (saida 7 do registrador de
+ * LEDs, no SPI, ainda nao descrito), que fica no estado deixado pelo boot.
+ * Portas do modem (option): a interface 2 responde a AT (medido com ATI:
+ * BG77, revisao BG77LAR02A04). Os numeros ttyUSB dependem da ordem em que
+ * o modem e o PL2303 aparecem.
+ */
+&usb_phy {
+	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+};
+
+/*
+ * Wi-Fi 2,4 GHz do proprio SoC (ath9k). Sem EEPROM: a calibracao vem da
+ * hard_config (wlan_data) pelo /etc/hotplug.d/firmware/10-ath9k-eeprom.
+ * Medido (wlan_data ja decodificada pelo rb_hardconfig, 2026-11-24): 0x1000
+ * comeca com 02 02 (versao de EEPROM e de modelo do formato AR9300) e todos
+ * os bytes diferentes de 0xFF ficam em 0x1000-0x1440, o mesmo trecho usado
+ * pelas outras MikroTik QCA953x. Igual a
+ * qca9533_mikrotik_routerboard-map-2nd.dts:100-104.
+ */
+&wmac {
+	status = "okay";
+
+	qca,no-eeprom;
 };

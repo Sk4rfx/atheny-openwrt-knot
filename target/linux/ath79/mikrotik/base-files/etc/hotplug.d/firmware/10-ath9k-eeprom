@@ -39,6 +39,7 @@ case "$FIRMWARE" in
 	mikrotik,routerboard-map-2nd)
 		caldata_mikrotik_ath9k 0x1000 0x440 $(macaddr_add "$mac_base" 3)
 		;;
+	mikrotik,routerboard-924i-2nd-bt5-bg77-r2|\
 	mikrotik,routerboard-mapl-2nd|\
 	mikrotik,routerboard-wap-g-5hact2hnd)
 		caldata_mikrotik_ath9k 0x1000 0x440 $(macaddr_add "$mac_base" 2)
