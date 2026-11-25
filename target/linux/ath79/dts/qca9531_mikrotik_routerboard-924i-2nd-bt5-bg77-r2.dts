@@ -376,6 +376,26 @@
 			gpio-export,output = <0>;
 			gpios = <&gpio 17 GPIO_ACTIVE_HIGH>;
 		};
+
+		/*
+		 * PoE de saida da Ether2 (passivo). Medido (2026-11-25, fonte de
+		 * 12 V, multimetro entre azul e marrom, sem carga): GPIO14 em 1 =
+		 * 11,72 V e o GPIO12 vai a 1; em 0 = 9,68 V (provavel fuga sem
+		 * carga, a confirmar com carga) e o GPIO12 volta a 0. Mesmo pino e
+		 * polaridade da mAP-2nD (qca9533_mikrotik_routerboard-map-2nd.dts:
+		 * 72-76). Desligado por padrao.
+		 */
+		enable_poe {
+			gpio-export,name = "enable-poe";
+			gpio-export,output = <0>;
+			gpios = <&gpio 14 GPIO_ACTIVE_HIGH>;
+		};
+
+		/* acompanha o estado do PoE (medido, ver acima); so leitura */
+		poe_status {
+			gpio-export,name = "poe-status";
+			gpios = <&gpio 12 GPIO_ACTIVE_HIGH>;
+		};
 	};
 };
 

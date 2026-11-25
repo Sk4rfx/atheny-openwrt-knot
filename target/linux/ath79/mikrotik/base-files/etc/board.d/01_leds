@@ -37,6 +37,7 @@ mikrotik,routerboard-924i-2nd-bt5-bg77-r2)
 	ucidef_set_led_netdev "ether1" "ether1" "green:ether1" "eth1"
 	ucidef_set_led_switch "ether2" "ether2" "green:ether2" "switch0" "0x4"
 	ucidef_set_led_wlan "wlan" "wlan" "green:wlan" "phy0tpt"
+	ucidef_set_led_gpio "poe" "poe" "red:poe" "14" "0"
 	;;
 mikrotik,routerboard-750-r2|\
 mikrotik,routerboard-951ui-2hnd|\
