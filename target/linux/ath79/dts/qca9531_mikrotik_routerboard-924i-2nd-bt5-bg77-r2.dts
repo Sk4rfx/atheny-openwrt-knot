@@ -149,6 +149,13 @@
  * UART do SoC (ttyS0, existe no RouterOS). Os pinos fisicos do console na
  * placa ainda nao foram identificados. ref: qca9531_glinet_gl-s200.dtsi:105-107
  */
+&pinmux {
+	/* GPIO_OUT_FUNC0[31:24] = 0: GPIO3 como GPIO (RouterBOOT: SPI CS2) */
+	cs2_gpio_pins: pinmux_cs2_gpio_pins {
+		pinctrl-single,bits = <0x0 0x0 0xff000000>;
+	};
+};
+
 &uart {
 	status = "okay";
 };
@@ -160,17 +167,22 @@
  * selects do SPI configurados (GPIO5 = CS0, GPIO1 = CS1, GPIO3 = CS2;
  * GPIO6 = CLK, GPIO7 = MOSI, GPIO8 = provavel MISO). Medido pelo ID no
  * dmesg: CS0 = NOR W25Q128JV (16 MiB), CS1 = SPI-NAND W25N01GV. CS2 = o
- * nRF52832 (Bluetooth), pela lista de dispositivos do firmware de fabrica;
- * nao descrito: o driver so o deixa inativo (spi-ar934x.c:189-191).
+ * nRF52832 (Bluetooth), pela lista de dispositivos do firmware de fabrica.
  */
 &spi {
 	status = "okay";
 
+	pinctrl-names = "default";
+	pinctrl-0 = <&cs2_gpio_pins>;
+
 	/*
-	 * CS0-CS2 nativos; CS3 = GPIO11, a selecao/latch do registrador de
-	 * LEDs (precisa do patch 941-spi-ar934x-support-gpio-chip-selects).
+	 * CS0 e CS1 nativos; CS2 = GPIO3 como GPIO, para dar ao nRF52832 o
+	 * tempo de preparacao entre o CS e o primeiro clock (o CS nativo desce
+	 * junto com o clock); CS3 = GPIO11, a selecao/latch do registrador de
+	 * LEDs. Os dois precisam do patch 941-spi-ar934x-support-gpio-chip-selects.
 	 */
-	cs-gpios = <0>, <0>, <0>, <&gpio 11 GPIO_ACTIVE_LOW>;
+	cs-gpios = <0>, <0>, <&gpio 3 GPIO_ACTIVE_LOW>,
+		   <&gpio 11 GPIO_ACTIVE_LOW>;
 
 	flash@0 {
 		compatible = "jedec,spi-nor";
@@ -262,6 +274,23 @@
 				reg = <0x400000 0x7c00000>;	/* 124 MiB */
 			};
 		};
+	};
+
+	/*
+	 * Bluetooth LE: Nordic nRF52832 com o firmware HCI (Zephyr) da
+	 * MikroTik ja gravado. Pela lista de dispositivos do firmware de
+	 * fabrica: "spi-nRF52832" no CS2, 8 MHz, modo SPI 0, interrupcao no
+	 * GPIO2. H4 sobre SPI; o nRF ativa a linha enquanto esta ocupado com
+	 * um pacote recebido e quando tem pacote para o host. Medido nesta
+	 * unidade: com o CS nativo (sem pausa antes do clock), o nRF perde o
+	 * primeiro bit; com 5 us, nenhum erro. Driver: kmod-hci-nrf52-spi.
+	 */
+	bluetooth@2 {
+		compatible = "mikrotik,nrf52-hci-spi";
+		reg = <2>;				/* chip select 2 */
+		spi-max-frequency = <8000000>;
+		spi-cs-setup-delay-ns = <5000>;
+		irq-gpios = <&gpio 2 GPIO_ACTIVE_LOW>;
 	};
 
 	/*
