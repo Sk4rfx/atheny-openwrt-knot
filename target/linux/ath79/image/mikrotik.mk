@@ -117,7 +117,8 @@ define Device/mikrotik_routerboard-924i-2nd-bt5-bg77-r2
   DEVICE_MODEL := RouterBOARD 924i-2nD-BT5&BG77 (KNOT)
   DEVICE_VARIANT := r2
   KERNEL := kernel-bin | append-dtb-elf | check-size 3584k
-  DEVICE_PACKAGES += kmod-usb2 kmod-usb-serial-option kmod-usb-serial-pl2303
+  DEVICE_PACKAGES += kmod-ledtrig-gpio kmod-usb2 kmod-usb-serial-option \
+	kmod-usb-serial-pl2303
   DEFAULT := n
 endef
 TARGET_DEVICES += mikrotik_routerboard-924i-2nd-bt5-bg77-r2
